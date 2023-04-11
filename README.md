@@ -5,6 +5,31 @@ This software is under active development and changes should be expected.
 
 # Running a SHELTRPointe node. 
 
+
+### ghsotd Requirements.
+
+SHELTRPointe depends on a running instance of ghostd. The folling options must be set either in ghost.conf or as launch options.
+
+```
+addressindex=1
+server=1
+txindex=1
+
+rpcuser=user
+rpcpassword=password
+rpcallowip=127.0.0.1
+rpcport=51725
+rpcbind=127.0.0.1
+
+zmqpubrawtx=tcp://127.0.0.1:28332
+zmqpubrawblock=tcp://127.0.0.1:28332
+zmqpubhashtx=tcp://127.0.0.1:28332
+zmqpubhashblock=tcp://127.0.0.1:28332
+zmqpubsequence=tcp://127.0.0.1:28332
+zmqpubhashwtx=tcp://127.0.0.1:28332
+
+```
+
 ### Clone the repository and Change directory. 
 
 `git clone https://github.com/bleach86/SHELTRPointe/`
