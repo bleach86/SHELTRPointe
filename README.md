@@ -6,7 +6,7 @@ This software is under active development and changes should be expected.
 # Running a SHELTRPointe node. 
 
 
-### ghsotd Requirements.
+### ghostd Requirements.
 
 SHELTRPointe depends on a running instance of ghostd. The folling options must be set either in ghost.conf or as launch options.
 
