@@ -1,0 +1,10 @@
+miniupnpc
+pyzmq
+python-socketio
+python-socketio[client]
+quart
+quart[dotenv]
+quart_cors
+uvicorn
+plyvel
+jsonrpc_async
