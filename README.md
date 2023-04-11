@@ -5,11 +5,9 @@ This software is under active development and changes should be expected.
 
 # Running a SHELTRPointe node. 
 
-### Clone the repository.
+### Clone the repository and Change directory. 
 
 `git clone https://github.com/bleach86/SHELTRPointe/`
-
-### Change directory.
 
 `cd SHELTRPointe`
 
