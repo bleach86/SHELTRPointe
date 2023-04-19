@@ -84,7 +84,7 @@ class ZMQHandler():
         
         if decodeTx['txid'] in self.sentTxInfo:
             self.sentTxInfo.remove(decodeTx['txid'])
-            print(self.sentTxInfo)
+            #print(self.sentTxInfo)
             return
         
         inputs = await self.getInputs(decodeTx['vin'])
