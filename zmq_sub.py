@@ -84,7 +84,7 @@ class ZMQHandler():
         
         if decodeTx['txid'] in self.sentTxInfo:
             self.sentTxInfo.remove(decodeTx['txid'])
-            #print(self.sentTxInfo)
+            print(self.sentTxInfo)
             return
         
         inputs = await self.getInputs(decodeTx['vin'])
@@ -152,10 +152,26 @@ class ZMQHandler():
 
         return inputs
 
+    async def cleanUpTxid(self):
+
+        while True:
+            
+            for txid in self.sentTxInfo.copy():
+                
+                try:
+                    tx = callrpc(self.rpcPort, "getrawtransaction", [txid, True])
+
+                    if "confirmations" in tx and (tx['confirmations'] < 0 or tx['confirmations'] > 0):
+                        self.sentTxInfo.remove(txid)
+                except:
+                    self.sentTxInfo.remove(txid)
+            
+            await asyncio.sleep(600)
 
     def start(self):
         #self.loop.add_signal_handler(signal.SIGINT, self.stop)
         self.loop.create_task(self.handle())
+        self.loop.create_task(self.cleanUpTxid())
 
     def stop(self):
         self.loop.stop()
