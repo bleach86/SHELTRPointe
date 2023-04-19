@@ -118,7 +118,7 @@ async def getTx(txid, standalone=False):
             tx['reward'] = float(rewardDetails['blockreward'])
             tx['rewardSat'] = convertToSat(rewardDetails['blockreward'])
 
-            if "gvrreward" in rewardDetails:
+            if "gvrreward" in rewardDetails and rewardDetails['blockreward'] > 0:
                 tx['isAGVR'] = True
                 tx['rewardAGVR'] = float(rewardDetails['gvrreward'])
                 tx['rewardAGVRSat'] = convertToSat(rewardDetails['gvrreward'])
@@ -366,7 +366,7 @@ def getAddrHist(txids, fromIdx, toIdx):
                 tx['reward'] = float(rewardDetails['blockreward'])
                 tx['rewardSat'] = convertToSat(rewardDetails['blockreward'])
 
-                if "gvrreward" in rewardDetails:
+                if "gvrreward" in rewardDetails and rewardDetails['blockreward'] > 0:
                     tx['isAGVR'] = True
                     tx['rewardAGVR'] = float(rewardDetails['gvrreward'])
                     tx['rewardAGVRSat'] = convertToSat(rewardDetails['gvrreward'])

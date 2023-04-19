@@ -60,6 +60,8 @@ class ZMQHandler():
         self.rpcPort = rpcPort
         self.app = app
 
+        self.sentTxInfo = []
+
     async def handle(self) :
         topic, body, seq = await self.zmqSubSocket.recv_multipart()
         sequence = "Unknown"
@@ -79,6 +81,11 @@ class ZMQHandler():
 
     async def processTx(self, rawTx, isCoinStake):
         decodeTx = callrpc(self.rpcPort, "decoderawtransaction", [rawTx])
+        
+        if decodeTx['txid'] in self.sentTxInfo:
+            self.sentTxInfo.remove(decodeTx['txid'])
+            return
+        
         inputs = await self.getInputs(decodeTx['vin'])
         outputs = {
             "addrs": {},
@@ -114,6 +121,8 @@ class ZMQHandler():
         }
 
         await self.app.emit('room_message', txInfo, room="tx")
+
+        self.sentTxInfo.append(decodeTx['txid'])
 
     async def getInputs(self, vin):
         inputs = {

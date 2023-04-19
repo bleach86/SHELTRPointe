@@ -44,8 +44,8 @@ fi
 
 # Start the server
 if [[ -n $SSL_KEYFILE && -n $SSL_CERTFILE ]]; then
-    uvicorn api:app._sio_app --host="$HOST" --port="$PORT" --ssl-keyfile="$SSL_KEYFILE" --ssl-certfile="$SSL_CERTFILE"
+    python3 -m uvicorn api:app._sio_app --host="$HOST" --port="$PORT" --ssl-keyfile="$SSL_KEYFILE" --ssl-certfile="$SSL_CERTFILE"
 else
-    uvicorn api:app._sio_app --host="$HOST" --port="$PORT"
+    python3 -m uvicorn api:app._sio_app --host="$HOST" --port="$PORT"
 fi
 
