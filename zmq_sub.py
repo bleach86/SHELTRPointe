@@ -122,7 +122,8 @@ class ZMQHandler():
 
         await self.app.emit('room_message', txInfo, room="tx")
 
-        self.sentTxInfo.append(decodeTx['txid'])
+        if not isCoinStake:
+            self.sentTxInfo.append(decodeTx['txid'])
 
     async def getInputs(self, vin):
         inputs = {
