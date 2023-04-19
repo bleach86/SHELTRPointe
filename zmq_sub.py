@@ -84,6 +84,7 @@ class ZMQHandler():
         
         if decodeTx['txid'] in self.sentTxInfo:
             self.sentTxInfo.remove(decodeTx['txid'])
+            print(self.sentTxInfo)
             return
         
         inputs = await self.getInputs(decodeTx['vin'])
@@ -153,7 +154,7 @@ class ZMQHandler():
 
 
     def start(self):
-        self.loop.add_signal_handler(signal.SIGINT, self.stop)
+        #self.loop.add_signal_handler(signal.SIGINT, self.stop)
         self.loop.create_task(self.handle())
 
     def stop(self):

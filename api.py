@@ -469,7 +469,7 @@ async def newTx(msg):
 async def startup():
     loop = asyncio.get_event_loop()
     daemon = ZMQHandler(PORT, loop, app)
-    app._quart_app.add_background_task(daemon.start())
+    app._quart_app.add_background_task(daemon.start)
     
 @app._quart_app.after_serving
 async def shutdown():
