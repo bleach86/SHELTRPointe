@@ -6,6 +6,7 @@ PORT="52555"
 SSL_KEYFILE=""
 SSL_CERTFILE=""
 PRODUCTION="false"
+STOP_SERVER="false"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -30,6 +31,10 @@ while [[ $# -gt 0 ]]; do
             PRODUCTION="true"
             shift
             ;;
+        --stop)
+            STOP_SERVER="true"
+            shift
+            ;;
         *)
             echo "Unknown argument: $1"
             exit 1
@@ -42,10 +47,15 @@ if [[ $PRODUCTION == "true" ]]; then
     HOST="0.0.0.0"
 fi
 
-# Start the server
-if [[ -n $SSL_KEYFILE && -n $SSL_CERTFILE ]]; then
-    python3 -m uvicorn api:app._sio_app --host="$HOST" --port="$PORT" --ssl-keyfile="$SSL_KEYFILE" --ssl-certfile="$SSL_CERTFILE"
+# Stop the server if the --stop flag is provided
+if [[ $STOP_SERVER == "true" ]]; then
+    kill $(lsof -t -i:$PORT)
 else
-    python3 -m uvicorn api:app._sio_app --host="$HOST" --port="$PORT"
+    # Start the server
+    if [[ -n $SSL_KEYFILE && -n $SSL_CERTFILE ]]; then
+        python3 -m uvicorn api:app._sio_app --host="$HOST" --port="$PORT" --ssl-keyfile="$SSL_KEYFILE" --ssl-certfile="$SSL_CERTFILE"
+    else
+        python3 -m uvicorn api:app._sio_app --host="$HOST" --port="$PORT"
+    fi
 fi
 
