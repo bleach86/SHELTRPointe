@@ -84,7 +84,7 @@ class ZMQHandler():
         
         if decodeTx['txid'] in self.sentTxInfo:
             self.sentTxInfo.remove(decodeTx['txid'])
-            print(self.sentTxInfo)
+            #print(self.sentTxInfo)
             return
         
         inputs = await self.getInputs(decodeTx['vin'])
@@ -155,7 +155,7 @@ class ZMQHandler():
     async def cleanUpTxid(self):
 
         while True:
-            
+
             for txid in self.sentTxInfo.copy():
                 
                 try:
