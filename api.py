@@ -11,12 +11,11 @@ import uvicorn
 
 from binascii import unhexlify
 
-import threading, asyncio, random
+import asyncio, random
 import queue
 import zmq
 import plyvel
 
-from threading import Thread
 from functools import wraps
 from database import Database
 
@@ -418,14 +417,10 @@ async def test_message(message):
     await app.emit('my response', {'data': message['data']})
 
 
-@app.on('my broadcast event')
-async def test_message(message):
-    await app.emit('my response', {'data': message['data']}, broadcast=True)
-
-
 @app.on('connect')
 async def test_connect(sid, environ):
-    await app.emit('', {'data': 'Connected'})
+    pass
+    #await app.emit('', {'data': 'Connected'})
 
 @app.on('disconnect')
 async def test_disconnect(sid):
@@ -470,10 +465,11 @@ async def startup():
     loop = asyncio.get_event_loop()
     daemon = ZMQHandler(PORT, loop, app)
     app._quart_app.add_background_task(daemon.start)
+    app._quart_app.add_background_task(vinDetailCleanup)
     
 @app._quart_app.after_serving
 async def shutdown():
-    app.smtp_server.close()
+    app._quart_app.background_tasks.pop().cancel()
 
 def requestUpnp():
     import miniupnpc
@@ -492,10 +488,11 @@ def requestUpnp():
         print(e)
 
 
-def vinDetailCleanup():
+async def vinDetailCleanup():
     while True:
         vinDetail = db.getAllVinDetail()
         for item in vinDetail:
+            await asyncio.sleep(0.01)
             tx = callrpc(PORT, "getrawtransaction", [item[0], True])
             if "confirmations" in tx and tx['confirmations'] > 100:
                 if not lvldb.get(bytes(item[0], "utf-8")):
@@ -508,7 +505,7 @@ def vinDetailCleanup():
                         tx['reward'] = float(rewardDetails['blockreward'])
                         tx['rewardSat'] = convertToSat(rewardDetails['blockreward'])
 
-                        if "gvrreward" in rewardDetails:
+                        if "gvrreward" in rewardDetails and rewardDetails['blockreward'] > 0:
                             tx['isAGVR'] = True
                             tx['rewardAGVR'] = float(rewardDetails['gvrreward'])
                             tx['rewardAGVRSat'] = convertToSat(rewardDetails['gvrreward'])
@@ -522,11 +519,10 @@ def vinDetailCleanup():
                 
                 db.removeVinDetail(item[0])
         
-        time.sleep(300)
+        await asyncio.sleep(60*60) # one hour
 
 
 if __name__ == '__main__':
     # requestUpnp()
-    t = Thread(target=vinDetailCleanup, daemon=True)
-    t.start()
+
     app.run("0.0.0.0", 52555)

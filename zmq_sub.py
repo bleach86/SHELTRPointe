@@ -84,7 +84,7 @@ class ZMQHandler():
         
         if decodeTx['txid'] in self.sentTxInfo:
             self.sentTxInfo.remove(decodeTx['txid'])
-            #print(self.sentTxInfo)
+            
             return
         
         inputs = await self.getInputs(decodeTx['vin'])
@@ -165,7 +165,7 @@ class ZMQHandler():
                         self.sentTxInfo.remove(txid)
                 except:
                     self.sentTxInfo.remove(txid)
-            
+                    
             await asyncio.sleep(600)
 
     def start(self):
