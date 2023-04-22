@@ -419,7 +419,8 @@ async def test_message(message):
 
 @app.on('connect')
 async def test_connect(sid, environ):
-    await app.emit('', {'data': 'Connected'})
+    pass
+    #await app.emit('', {'data': 'Connected'})
 
 @app.on('disconnect')
 async def test_disconnect(sid):
