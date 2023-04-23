@@ -74,7 +74,10 @@ class ZMQHandler():
         elif topic == b"rawblock":
             pass
         elif topic == b"rawtx":
-            await self.processTx(binascii.hexlify(body).decode("utf-8"), body[1] == 0x02)
+            try:
+                await self.processTx(binascii.hexlify(body).decode("utf-8"), body[1] == 0x02)
+            except Exception as e:
+                print(e)
 
         # schedule ourselves to receive the next message
         asyncio.ensure_future(self.handle())
@@ -144,11 +147,13 @@ class ZMQHandler():
             addr = utxo['scriptPubKey']['addresses'][0]
 
             if addr in inputs['addrs']:
-                inputs['addrs'][addr] += utxo['value']
-                inputs['inputAmount'] += utxo['value']
+                if "value" in utxo:
+                    inputs['addrs'][addr] += utxo['value']
+                    inputs['inputAmount'] += utxo['value']
             else:
-                inputs['addrs'][addr] = utxo['value']
-                inputs['inputAmount'] += utxo['value']
+                if "value" in utxo:
+                    inputs['addrs'][addr] = utxo['value']
+                    inputs['inputAmount'] += utxo['value']
 
         return inputs
 
