@@ -1,100 +1,122 @@
-import aiosqlite
-import json
-import time
-import random
+import sqlite3, json, time, random
 from datetime import datetime
-import asyncio
-import plyvel
 
 class Database:
     def __init__(self):
-        self.conn = None
+        self.conn = sqlite3.connect("sheltrPointe.db", check_same_thread=False)
+        self.cursor = self.conn.cursor()
+
+        self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = self.cursor.fetchall()
+        #self.cursor.execute("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_txid'")
+        #txindex = self.cursor.fetchone()
+        #self.cursor.execute("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_vin'")
+        #vinindex = self.cursor.fetchone()
+
         self.tableList = []
-
-    async def connect(self):
-        if self.conn is None:
-            try:
-                self.conn = await aiosqlite.connect("sheltrPointe.db")
-            except RuntimeError:
-                print("Database connection already started.")
-                return
-
-
-        self.cursor = await self.conn.cursor()
-        await self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        tables = await self.cursor.fetchall()
         for i in tables:
             self.tableList.append(i[0])
 
-        if 'vinDetailAsync' not in self.tableList:
-            await self.initVinDetail()
 
-    async def close(self):
-        await self.conn.close()
+        if 'vinDetail' not in self.tableList:
+            self.initVinDetail()
 
-    async def initVinDetail(self):
+        if 'txCache' not in self.tableList:
+            self.inittxCache()
 
-        await self.cursor.execute("""CREATE TABLE vinDetailAsync (
-                                txid text primary key unique,
-                                vinDetail text,
-                                timestamp integer
-                            )""")
-        await self.conn.commit()
+        if 'sheltrMQ' not in self.tableList:
+            self.initsheltrMQ()
 
-    async def inittxCache(self):
-        await self.cursor.execute("""CREATE TABLE txCache (
-                                txid text,
-                                txdetail text,
-                                height integer
-                            )""")
-        await self.conn.commit()
+        #if not txindex:
+        #    self.initTxIndex()
 
-    async def initsheltrMQ(self):
-        await self.cursor.execute("""CREATE TABLE sheltrMQ (
-                                id INTEGER PRIMARY KEY,
-                                data text
-                            )""")
-        await self.conn.commit()
+        #if not vinindex:
+        #    self.initVinIndex()
 
-    async def newVinDetail(self, txid, vinDetail, timestamp):
-        await self.cursor.execute(
-            """INSERT OR IGNORE INTO vinDetailAsync VALUES (?, ?, ?)""",
-            (txid, vinDetail, timestamp))
-        await self.conn.commit()
 
-    async def isVinDetailExisting(self, txid):
-        await self.cursor.execute("""SELECT * FROM vinDetailAsync WHERE txid=?""", (txid,))
-        existing = await self.cursor.fetchone()
+    def initVinDetail(self):
+        with self.conn:
+            self.cursor.execute("""CREATE TABLE vinDetail (
+                                   txid text,
+                                   vinDetail text,
+                                   timestamp integer
+                                )""")
+
+    def inittxCache(self):
+        with self.conn:
+            self.cursor.execute("""CREATE TABLE txCache (
+                                   txid text,
+                                   txdetail text,
+                                   height integer
+                                )""")
+
+    def initsheltrMQ(self):
+        with self.conn:
+            self.cursor.execute("""CREATE TABLE sheltrMQ (
+                                   id INTEGER PRIMARY KEY,
+                                   data text
+                                )""")
+
+    def initTxIndex(self):
+        with self.conn:
+            self.cursor.execute("CREATE INDEX idx_txid ON txCache(height DESC)")
+
+    def initVinIndex(self):
+        with self.conn:
+            self.cursor.execute("CREATE INDEX idx_vin ON vinDetail(txid)")
+
+    def newVinDetail(self, txid, vinDetail, timestamp):
+        if not self.isVinDetailExisting(txid):
+            with self.conn:
+                self.cursor.execute(
+                    """INSERT INTO vinDetail VALUES (:txid, :vinDetail, :timestamp)""",
+                    {'txid': txid, 'vinDetail': vinDetail, "timestamp": timestamp})
+    
+    def isVinDetailExisting(self, txid):
+        self.cursor.execute("""SELECT * FROM vinDetail WHERE txid=:txid""", {'txid': txid})
+        existing = self.cursor.fetchone()
         if existing == None:
             return False
         else:
             return True
 
-    async def getVinDetail(self, txid):
-        await self.cursor.execute("""SELECT * FROM vinDetailAsync WHERE txid=?""", (txid,))
-        existing = await self.cursor.fetchone()
+    def getVinDetail(self, txid):
+        self.cursor.execute("""SELECT * FROM vinDetail WHERE txid=:txid""", {'txid': txid})
+        existing = self.cursor.fetchone()
         if existing == None:
             return None
         else:
             return json.loads(existing[1])
 
-    async def getAllVinDetail(self):
-        await self.cursor.execute("""SELECT * FROM vinDetailAsync""")
-        existing = await self.cursor.fetchall()
+    def getAllVinDetail(self):
+        self.cursor.execute("""SELECT * FROM vinDetail""")
+        existing = self.cursor.fetchall()
         return existing
 
-    async def removeVinDetail(self, txid):
-        await self.cursor.execute(f"""DELETE from vinDetailAsync WHERE txid=?""", (txid,))
-        await self.conn.commit()
+    def removeVinDetail(self, txid):
+        with self.conn:
+            self.cursor.execute(f"""DELETE from vinDetail WHERE txid=:txid""", {"txid": txid})
 
 
-class AsyncLvldb:
-    def __init__(self):
-        self.lvldb = plyvel.DB('sheltrPointLVL.db', create_if_missing=True)
+    def newtxCache(self, txid, txdetail, height):
+        if not self.istxCacheExisting(txid):
+            with self.conn:
+                self.cursor.execute(
+                    """INSERT INTO txCache VALUES (:txid, :txdetail, :height)""",
+                    {'txid': txid, 'txdetail': txdetail, "height": height})
     
-    async def get(self, key):
-        return await asyncio.to_thread(self.lvldb.get, key)
+    def istxCacheExisting(self, txid):
+        self.cursor.execute("""SELECT * FROM txCache INDEXED BY idx_txid WHERE txid=:txid""", {'txid': txid})
+        existing = self.cursor.fetchone()
+        if existing == None:
+            return False
+        else:
+            return True
 
-    async def put(self, key, value):
-        return await asyncio.to_thread(self.lvldb.put, key, value)
-
+    def gettxCache(self, txid):
+        self.cursor.execute("""SELECT * FROM txCache INDEXED BY idx_txid WHERE txid=:txid""", {'txid': txid})
+        existing = self.cursor.fetchone()
+        if existing == None:
+            return None
+        else:
+            return json.loads(existing[1])

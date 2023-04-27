@@ -5,7 +5,7 @@ import socketio
 import ssl
 
 import time, json
-from util import callrpc as callrpc_util
+from util import callrpc
 import asyncio
 import uvicorn
 
@@ -14,9 +14,14 @@ from binascii import unhexlify
 import asyncio, random
 import queue
 import zmq
+import plyvel
 
 from functools import wraps
-from database import Database, AsyncLvldb
+from database import Database
+
+db = Database()
+
+lvldb = plyvel.DB('sheltrPointLVL.db', create_if_missing=True)
 
 from zmq_sub import ZMQHandler
 
@@ -56,8 +61,6 @@ class QuartSIO:
 
 
 app = QuartSIO()
-lvldb = AsyncLvldb()
-db = Database()
 
 
 def api_required(func):
@@ -66,10 +69,6 @@ def api_required(func):
         if json.loads(await request.get_data()):
             return await func(*args, **kwargs)
     return decorator
-
-
-async def callrpc(*args):
-    return await asyncio.to_thread(callrpc_util, *args)
 
 
 @app._quart_app.after_request
@@ -89,31 +88,31 @@ async def ping():
 
 @app.route('/getblockcount/', methods=["GET"])
 async def getBlockCount():
-    return jsonify(await callrpc(PORT, "getblockcount"))
+    return jsonify(callrpc(PORT, "getblockcount"))
 
 @app.route('/api/block/<blockHash>/', methods=["GET"])
 async def getBlock(blockHash):
-    return jsonify(await callrpc(PORT, "getblock", [blockHash]))
+    return jsonify(callrpc(PORT, "getblock", [blockHash]))
 
 @app.route('/api/block-index/<blockIndex>/', methods=["GET"])
 async def getBlockHash(blockIndex):
-    blockHash = {"blockHash": await callrpc(PORT, "getblockhash", [int(blockIndex)])}
+    blockHash = {"blockHash": callrpc(PORT, "getblockhash", [int(blockIndex)])}
     return jsonify(blockHash)
 
 @app.route('/api/tx/<txid>/', methods=["GET"])
 async def getTx(txid, standalone=False):
-    tx = await lvldb.get(bytes(txid, 'utf-8'))
+    tx = lvldb.get(bytes(txid, 'utf-8'))
     if tx:
         tx = json.loads(tx)   
         isCache = True
     else:
         isCache = False
-        tx = await callrpc(PORT, "getrawtransaction", [txid, True])
+        tx = callrpc(PORT, "getrawtransaction", [txid, True])
 
         isCoinStake = True if unhexlify(tx['hex'])[1] == 0x02 else False
         tx['isCoinStake'] = isCoinStake
         if isCoinStake:
-            rewardDetails = await callrpc(PORT, "getblockreward", [int(tx['height'])])
+            rewardDetails = callrpc(PORT, "getblockreward", [int(tx['height'])])
 
             tx['reward'] = float(rewardDetails['blockreward'])
             tx['rewardSat'] = convertToSat(rewardDetails['blockreward'])
@@ -125,18 +124,18 @@ async def getTx(txid, standalone=False):
             else:
                 tx['isAGVR'] = False 
 
-        tx['vin'] = await getInputDetails(tx['vin'], txid)
+        tx['vin'] = getInputDetails(tx['vin'], txid)
     
     if 'time' not in tx:
         tx['time'] = int(time.time())
     if "confirmations" in tx:
-        currHeight = await callrpc(PORT, "getblockcount") + 1
+        currHeight = callrpc(PORT, "getblockcount") + 1
         tx['confirmations'] = currHeight - tx['height']
     if not isCache:
         if "confirmations" in tx and tx['confirmations'] >= 100:
-            if await db.getVinDetail(txid):
-                await db.removeVinDetail(txid)
-            await lvldb.put(bytes(txid, 'utf-8'), json.dumps(tx, indent=2).encode('utf-8'))
+            if db.getVinDetail(txid):
+                db.removeVinDetail(txid)
+            lvldb.put(bytes(txid, 'utf-8'), json.dumps(tx, indent=2).encode('utf-8'))
 
     del tx['hex']
     if standalone:
@@ -148,7 +147,7 @@ async def getTx(txid, standalone=False):
 async def getTxHistory(addrs):
     addrs = removeBlank(addrs.split(','))
 
-    txids = await callrpc(PORT, "getaddresstxids", [{"addresses": addrs}])
+    txids = callrpc(PORT, "getaddresstxids", [{"addresses": addrs}])
     txHistory = []
     
     fromIdx = 0
@@ -160,7 +159,7 @@ async def getTxHistory(addrs):
     if request.args.get("to"):
         toIdx = int(request.args.get("to"))
     
-    mempool = await callrpc(PORT, "getaddressmempool", [{"addresses": addrs}])
+    mempool = callrpc(PORT, "getaddressmempool", [{"addresses": addrs}])
 
     if mempool:
         memTxs = []
@@ -170,7 +169,7 @@ async def getTxHistory(addrs):
         
         txids += memTxs
     
-    resp = await getAddrHist(txids, fromIdx, toIdx)
+    resp = getAddrHist(txids, fromIdx, toIdx)
 
     return jsonify(resp)
 
@@ -184,7 +183,7 @@ async def getTxHistoryPost():
     else:
         return "Missing Addresses"
 
-    txids = await callrpc(PORT, "getaddresstxids", [{"addresses": addrs}])
+    txids = callrpc(PORT, "getaddresstxids", [{"addresses": addrs}])
     txHistory = []
     
     fromIdx = 0
@@ -196,7 +195,7 @@ async def getTxHistoryPost():
     if "to" in reqJson:
         toIdx = int(reqJson['to'])
     
-    mempool = await callrpc(PORT, "getaddressmempool", [{"addresses": addrs}])
+    mempool = callrpc(PORT, "getaddressmempool", [{"addresses": addrs}])
 
     if mempool:
         memTxs = []
@@ -206,14 +205,14 @@ async def getTxHistoryPost():
         
         txids += memTxs
     
-    resp = await getAddrHist(txids, fromIdx, toIdx)
+    resp = getAddrHist(txids, fromIdx, toIdx)
 
     return jsonify(resp)
 
 
 @app.route('/api/addr/<addr>/utxo/', methods=["GET"])
 async def getUtxo(addr):
-    utxo = await getUTXOs(addr)
+    utxo = getUTXOs(addr)
 
     return jsonify(sorted(utxo, key=lambda d: d['confirmations']))
 
@@ -229,13 +228,13 @@ async def sendTx():
     except ValueError:
         return jsonify({"reject-reason": "Invalid Hex"})
     try:
-        testMemPool = await callrpc(PORT, "testmempoolaccept", [[req['rawtx']]])
+        testMemPool = callrpc(PORT, "testmempoolaccept", [[req['rawtx']]])
     except:
         return jsonify({"reject-reason": "Invalid Transaction"})
     if not testMemPool[0]['allowed']:
         return jsonify({"reject-reason": testMemPool[0]['reject-reason']})
     
-    txid = await callrpc(PORT, "sendrawtransaction", [req['rawtx']])
+    txid = callrpc(PORT, "sendrawtransaction", [req['rawtx']])
 
     return jsonify({"txid": txid})
 
@@ -250,22 +249,22 @@ async def getUtxoMultiGet():
     else:
         return "Missing Addresses"
     
-    utxo = await getUTXOs(addrs)
+    utxo = getUTXOs(addrs)
 
     return jsonify(sorted(utxo, key=lambda d: d['confirmations']))
 
 
-async def getUTXOs(addr):
+def getUTXOs(addr):
 
     addr = removeBlank(addr.split(','))
 
-    currHeight = await callrpc(PORT, "getblockcount") + 1
-    utxo = await callrpc(PORT, "getaddressutxos", [{"addresses": addr}])
+    currHeight = callrpc(PORT, "getblockcount") + 1
+    utxo = callrpc(PORT, "getaddressutxos", [{"addresses": addr}])
 
     for i in utxo:
         i['confirmations'] = currHeight - int(i['height'])
 
-    mempool = await callrpc(PORT, "getaddressmempool", [{"addresses": addr}])
+    mempool = callrpc(PORT, "getaddressmempool", [{"addresses": addr}])
 
     if mempool:
         for memUTXO in mempool.copy():
@@ -276,7 +275,7 @@ async def getUTXOs(addr):
                 mempool.remove(memUTXO)
 
             else:
-                tx = await callrpc(PORT, "getrawtransaction", [memUTXO['txid'], True])
+                tx = callrpc(PORT, "getrawtransaction", [memUTXO['txid'], True])
                 memUTXO['script'] = tx['vout'][memUTXO['index']]['scriptPubKey']['hex']
                 memUTXO['outputIndex'] = memUTXO['index']
                 memUTXO['confirmations'] = 0
@@ -288,9 +287,9 @@ async def getUTXOs(addr):
     return utxo
 
 
-async def getInputDetails(inputs, txid):
+def getInputDetails(inputs, txid):
     
-    existing = await db.getVinDetail(txid)
+    existing = db.getVinDetail(txid)
     
     if existing:
         return existing
@@ -306,9 +305,9 @@ async def getInputDetails(inputs, txid):
             vin['value'] = amount
             vin['valueSat'] = amountSats
         else:
-            inTX = await lvldb.get(bytes(vin['txid'], 'utf-8'))
+            inTX = lvldb.get(bytes(vin['txid'], 'utf-8'))
             if not inTX:
-                inTX = await callrpc(PORT, "getrawtransaction", [vin['txid'], True])
+                inTX = callrpc(PORT, "getrawtransaction", [vin['txid'], True])
             else:
                 inTX = json.loads(inTX)
             txType = inTX['vout'][vin['vout']]['type'] if "type" in inTX['vout'][vin['vout']] else "standard"
@@ -323,11 +322,11 @@ async def getInputDetails(inputs, txid):
             vin['value'] = amount
             vin['valueSat'] = amountSats
 
-    await db.newVinDetail(txid, json.dumps(inputs), int(time.time()))
+    db.newVinDetail(txid, json.dumps(inputs), int(time.time()))
     return inputs
 
 
-async def getAddrHist(txids, fromIdx, toIdx):
+def getAddrHist(txids, fromIdx, toIdx):
     txHistory = []
     txids.reverse()
     
@@ -346,68 +345,53 @@ async def getAddrHist(txids, fromIdx, toIdx):
     if fromIdx > toIdx:
         toIdx = fromIdx + 10
 
-    currHeight = await callrpc(PORT, "getblockcount") + 1
-    tasks = []
+    currHeight = callrpc(PORT, "getblockcount") + 1
 
     for txid in txids[fromIdx:toIdx]:
-        tasks.append(processTxHistoryItem(txid, currHeight))
+        tx = lvldb.get(bytes(txid, 'utf-8'))
+        if tx:
+            tx = json.loads(tx)   
+            isCache = True
+        else:
+            isCache = False
+            tx = callrpc(PORT, "getrawtransaction", [txid, True]) 
+        
+        if 'addr' not in tx['vin'][0]:
+            isCoinStake = True if unhexlify(tx['hex'])[1] == 0x02 else False
+            tx['isCoinStake'] = isCoinStake
+            if isCoinStake:
+                rewardDetails = callrpc(PORT, "getblockreward", [int(tx['height'])])
+
+                tx['reward'] = float(rewardDetails['blockreward'])
+                tx['rewardSat'] = convertToSat(rewardDetails['blockreward'])
+
+                if "gvrreward" in rewardDetails and rewardDetails['blockreward'] > 0:
+                    tx['isAGVR'] = True
+                    tx['rewardAGVR'] = float(rewardDetails['gvrreward'])
+                    tx['rewardAGVRSat'] = convertToSat(rewardDetails['gvrreward'])
+                else:
+                    tx['isAGVR'] = False
+            detailedVin = getInputDetails(tx['vin'], txid)
+            tx["vin"] = detailedVin
+        
+        if "confirmations" in tx:
+            tx['confirmations'] = currHeight - tx['height']
+        if not isCache:
+            if "confirmations" in tx and tx['confirmations'] >= 100:
+                if db.getVinDetail(txid):
+                    db.removeVinDetail(txid)
+                lvldb.put(bytes(txid, 'utf-8'), json.dumps(tx, indent=2).encode('utf-8'))
+        del tx['hex']
+        txHistory.append(tx)
     
-    results = await asyncio.gather(*tasks)
-
-    results = sorted(results, key=lambda a: a['confirmations'])
-
     resp = {
         "totalItems": len(txids),
         "from": fromIdx,
         "to": toIdx,
-        "items": results
+        "items": txHistory
     }
 
     return resp
-
-
-async def processTxHistoryItem(txid, currHeight):
-    txHistory = []
-    tx = await lvldb.get(bytes(txid, 'utf-8'))
-    if tx:
-        tx = json.loads(tx)   
-        isCache = True
-    else:
-        isCache = False
-        tx = await callrpc(PORT, "getrawtransaction", [txid, True]) 
-    
-    if 'addr' not in tx['vin'][0]:
-        isCoinStake = True if unhexlify(tx['hex'])[1] == 0x02 else False
-        tx['isCoinStake'] = isCoinStake
-        if isCoinStake:
-            rewardDetails = await callrpc(PORT, "getblockreward", [int(tx['height'])])
-
-            tx['reward'] = float(rewardDetails['blockreward'])
-            tx['rewardSat'] = convertToSat(rewardDetails['blockreward'])
-
-            if "gvrreward" in rewardDetails and rewardDetails['blockreward'] > 0:
-                tx['isAGVR'] = True
-                tx['rewardAGVR'] = float(rewardDetails['gvrreward'])
-                tx['rewardAGVRSat'] = convertToSat(rewardDetails['gvrreward'])
-            else:
-                tx['isAGVR'] = False
-        detailedVin = await getInputDetails(tx['vin'], txid)
-        tx["vin"] = detailedVin
-    
-    if "confirmations" in tx:
-        tx['confirmations'] = currHeight - tx['height']
-    else:
-        tx['confirmations'] = 0
-    
-    if not isCache:
-        if "confirmations" in tx and tx['confirmations'] >= 100:
-            if await db.getVinDetail(txid):
-                await db.removeVinDetail(txid)
-            await lvldb.put(bytes(txid, 'utf-8'), json.dumps(tx, indent=2).encode('utf-8'))
-    del tx['hex']
-
-    return tx
-
 
 
 def removeBlank(addrLst):
@@ -480,18 +464,12 @@ async def newTx(msg):
 async def startup():
     loop = asyncio.get_event_loop()
     daemon = ZMQHandler(PORT, loop, app)
-    app._quart_app.add_background_task(runDb)
     app._quart_app.add_background_task(daemon.start)
     app._quart_app.add_background_task(vinDetailCleanup)
     
 @app._quart_app.after_serving
 async def shutdown():
-    await db.close()
     app._quart_app.background_tasks.pop().cancel()
-
-
-async def runDb():
-    await db.connect()
 
 def requestUpnp():
     import miniupnpc
@@ -512,21 +490,17 @@ def requestUpnp():
 
 async def vinDetailCleanup():
     while True:
-        while not db.conn:
-            await asyncio.sleep(0.1)
-        vinDetail = await db.getAllVinDetail()
-
+        vinDetail = db.getAllVinDetail()
         for item in vinDetail:
-            
-            tx = await callrpc(PORT, "getrawtransaction", [item[0], True])
-            
-            if "confirmations" in tx and tx['confirmations'] >= 100:
-                if not await lvldb.get(bytes(item[0], "utf-8")):
-                    currHeight = await callrpc(PORT, "getblockcount") + 1
+            await asyncio.sleep(0.01)
+            tx = callrpc(PORT, "getrawtransaction", [item[0], True])
+            if "confirmations" in tx and tx['confirmations'] > 100:
+                if not lvldb.get(bytes(item[0], "utf-8")):
+                    currHeight = callrpc(PORT, "getblockcount") + 1
                     isCoinStake = True if unhexlify(tx['hex'])[1] == 0x02 else False
                     tx['isCoinStake'] = isCoinStake
                     if isCoinStake:
-                        rewardDetails = await callrpc(PORT, "getblockreward", [int(tx['height'])])
+                        rewardDetails = callrpc(PORT, "getblockreward", [int(tx['height'])])
 
                         tx['reward'] = float(rewardDetails['blockreward'])
                         tx['rewardSat'] = convertToSat(rewardDetails['blockreward'])
@@ -537,13 +511,13 @@ async def vinDetailCleanup():
                             tx['rewardAGVRSat'] = convertToSat(rewardDetails['gvrreward'])
                         else:
                             tx['isAGVR'] = False
-                    detailedVin = await getInputDetails(tx['vin'], item[0])
+                    detailedVin = getInputDetails(tx['vin'], item[0])
                     tx["vin"] = detailedVin
                     
                     tx['confirmations'] = currHeight - tx['height']
-                    await lvldb.put(bytes(item[0], 'utf-8'), json.dumps(tx, indent=2).encode('utf-8'))
+                    lvldb.put(bytes(item[0], 'utf-8'), json.dumps(tx, indent=2).encode('utf-8'))
                 
-                await db.removeVinDetail(item[0])
+                db.removeVinDetail(item[0])
         
         await asyncio.sleep(60*60) # one hour
 
