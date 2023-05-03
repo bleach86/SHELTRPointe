@@ -139,4 +139,4 @@ def callrpc_cli(bindir, datadir, chain, cmd):
 
 async def callrpc(*args, **kwargs):
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _callrpc, *args, **kw)
+    return await loop.run_in_executor(None, _callrpc, *args, **kwargs)
