@@ -12,6 +12,7 @@ import json
 import time
 import traceback
 import urllib
+import asyncio
 from xmlrpc.client import (
     Transport,
     Fault,
@@ -96,7 +97,7 @@ class Jsonrpc():
         """
 
 
-def callrpc(port, method, params=[], wallet=None):
+def _callrpc(port, method, params=[], wallet=None):
     #port = 51725
 
     try:
@@ -134,3 +135,8 @@ def callrpc_cli(bindir, datadir, chain, cmd):
     except Exception:
         pass
     return r
+
+
+async def callrpc(*args, **kwargs):
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _callrpc, *args, **kwargs)
