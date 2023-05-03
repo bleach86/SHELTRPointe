@@ -5,7 +5,7 @@ import socketio
 import ssl
 
 import time, json
-from util import callrpc as callrpc_util
+from util import callrpc
 import asyncio
 import uvicorn
 
@@ -24,7 +24,7 @@ PORT = 51725
 
 CORS_ALLOWED_ORIGINS = "*"
 
-VERSION = "0.1"
+VERSION = "0.2"
 
 class QuartSIO:
     def __init__(self) -> None:
@@ -66,10 +66,6 @@ def api_required(func):
         if json.loads(await request.get_data()):
             return await func(*args, **kwargs)
     return decorator
-
-
-async def callrpc(*args):
-    return await asyncio.to_thread(callrpc_util, *args)
 
 
 @app._quart_app.after_request
@@ -486,12 +482,11 @@ async def startup():
     
 @app._quart_app.after_serving
 async def shutdown():
-    await db.close()
     app._quart_app.background_tasks.pop().cancel()
 
 
 async def runDb():
-    await db.connect()
+    await db.initDB()
 
 def requestUpnp():
     import miniupnpc

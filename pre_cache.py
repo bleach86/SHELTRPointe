@@ -1,4 +1,4 @@
-from util import callrpc as callrpc_util
+from util import callrpc
 from binascii import unhexlify
 import json, time
 import random
@@ -8,8 +8,7 @@ from database import AsyncLvldb
 
 PORT = 51725
 
-async def callrpc(*args):
-    return await asyncio.to_thread(callrpc_util, *args)
+
 
 class PreCache:
     def __init__(self, lvldb):

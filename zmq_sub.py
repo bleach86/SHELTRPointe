@@ -35,8 +35,7 @@ import sys
 import json
 import socketio
 
-from util import callrpc as callrpc_util
-
+from util import callrpc
 
 if (sys.version_info.major, sys.version_info.minor) < (3, 5):
     print("This example only works with Python 3.5 and greater")
@@ -44,8 +43,6 @@ if (sys.version_info.major, sys.version_info.minor) < (3, 5):
 
 port = 28332
 
-async def callrpc(*args):
-    return await asyncio.to_thread(callrpc_util, *args)
 
 class ZMQHandler():
     def __init__(self, rpcPort, loop, app):
