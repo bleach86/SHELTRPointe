@@ -62,7 +62,7 @@ class ZMQHandler():
 
         self.sentTxInfo = []
 
-    async def handle(self):
+    async def handle(self) :
         topic, body, seq = await self.zmqSubSocket.recv_multipart()
         sequence = "Unknown"
         if len(seq) == 4:
@@ -83,7 +83,7 @@ class ZMQHandler():
         asyncio.ensure_future(self.handle())
 
     async def processTx(self, rawTx, isCoinStake):
-        decodeTx = await callrpc(self.rpcPort, "decoderawtransaction", [rawTx])
+        decodeTx = callrpc(self.rpcPort, "decoderawtransaction", [rawTx])
         
         if decodeTx['txid'] in self.sentTxInfo:
             self.sentTxInfo.remove(decodeTx['txid'])
@@ -142,8 +142,7 @@ class ZMQHandler():
                 else:
                     inputs['addrs']['anon'] = 0
                     continue
-            utxo = await callrpc(self.rpcPort, "getrawtransaction", [txIn['txid'], True])
-            utxo = utxo["vout"][txIn['vout']]
+            utxo = callrpc(self.rpcPort, "getrawtransaction", [txIn['txid'], True])["vout"][txIn['vout']]
 
             addr = utxo['scriptPubKey']['addresses'][0]
 
@@ -165,7 +164,7 @@ class ZMQHandler():
             for txid in self.sentTxInfo.copy():
                 
                 try:
-                    tx = await callrpc(self.rpcPort, "getrawtransaction", [txid, True])
+                    tx = callrpc(self.rpcPort, "getrawtransaction", [txid, True])
 
                     if "confirmations" in tx and (tx['confirmations'] < 0 or tx['confirmations'] > 0):
                         self.sentTxInfo.remove(txid)
@@ -175,6 +174,7 @@ class ZMQHandler():
             await asyncio.sleep(600)
 
     def start(self):
+        #self.loop.add_signal_handler(signal.SIGINT, self.stop)
         self.loop.create_task(self.handle())
         self.loop.create_task(self.cleanUpTxid())
 

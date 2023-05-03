@@ -7,4 +7,4 @@ quart[dotenv]
 quart_cors
 uvicorn
 plyvel
-aiosqlite
+jsonrpc_async

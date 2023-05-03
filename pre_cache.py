@@ -1,20 +1,17 @@
 from util import callrpc
 from binascii import unhexlify
 import json, time
+import plyvel
 import random
-import asyncio
-
-from database import AsyncLvldb
 
 PORT = 51725
-
 
 
 class PreCache:
     def __init__(self, lvldb):
         self.lvldb = lvldb
 
-    async def getInputDetails(self, inputs, txid):
+    def getInputDetails(self, inputs, txid):
 
         for vin in inputs:
             addr = None
@@ -27,9 +24,9 @@ class PreCache:
                 vin['value'] = amount
                 vin['valueSat'] = amountSats
             else:
-                inTX = await self.lvldb.get(bytes(vin['txid'], "utf-8"))
+                inTX = self.lvldb.get(bytes(vin['txid'], "utf-8"))
                 if not inTX:
-                    inTX = await callrpc(PORT, "getrawtransaction", [vin['txid'], True])
+                    inTX = callrpc(PORT, "getrawtransaction", [vin['txid'], True])
                 else:
                     inTX = json.loads(inTX)
                 txType = inTX['vout'][vin['vout']]['type'] if "type" in inTX['vout'][vin['vout']] else "standard"
@@ -47,27 +44,25 @@ class PreCache:
         return inputs
 
 
-    async def itterBlocks(self):
+    def itterBlocks(self):
 
-        bestBlock = await self.lvldb.get(b"bestBlock")
-        currHeight = await callrpc(PORT, "getblockcount") + 1
-        start = time.time()
-        
+        bestBlock = self.lvldb.get(b"bestBlock")
+        currHeight = callrpc(PORT, "getblockcount") + 1
         for i in range(int(bestBlock) if bestBlock else 1, currHeight):
             
-            blockHash = await callrpc(PORT, "getblockhash", [i])
+            blockHash = callrpc(PORT, "getblockhash", [i])
 
-            block = await callrpc(PORT, "getblock", [blockHash, 2])
+            block = callrpc(PORT, "getblock", [blockHash, 2])
             
 
             for tx in block['tx']:
-                if await self.lvldb.get(bytes(tx['txid'], 'utf-8')):
+                if self.lvldb.get(bytes(tx['txid'], 'utf-8')):
                     continue
 
                 isCoinStake = True if unhexlify(tx['hex'])[1] == 0x02 else False
                 tx['isCoinStake'] = isCoinStake
                 if isCoinStake:
-                    rewardDetails = await callrpc(PORT, "getblockreward", [int(block['height'])])
+                    rewardDetails = callrpc(PORT, "getblockreward", [int(block['height'])])
 
                     tx['reward'] = float(rewardDetails['blockreward'])
                     tx['rewardSat'] = convertToSat(rewardDetails['blockreward'])
@@ -85,15 +80,15 @@ class PreCache:
                 tx["time"] = block['time']
                 tx["blocktime"] = block['time']
 
-                tx['vin'] = await self.getInputDetails(tx['vin'], tx['txid'])
+                tx['vin'] = self.getInputDetails(tx['vin'], tx['txid'])
 
                 if block['confirmations'] >= 100:
-                    await self.lvldb.put(bytes(tx['txid'], 'utf-8'), json.dumps(tx, indent=2).encode('utf-8'))
+                    self.lvldb.put(bytes(tx['txid'], 'utf-8'), json.dumps(tx, indent=2).encode('utf-8'))
             
             if (i % 1_000) == 0:
-                print(f"{i} Blocks processed in {time.time() - start} seconds")
-                start = time.time()
-            await self.lvldb.put(b"bestBlock", bytes(str(i), 'utf-8'))
+                print(f"{i} Blocks processed")
+            
+            self.lvldb.put(b"bestBlock", bytes(str(i), 'utf-8'))
 
 def convertFromSat(value):
         sat_readable = value / 10**8
@@ -103,12 +98,9 @@ def convertToSat(value):
     sat_readable = value * 10**8
     return round(sat_readable)
 
-async def main():
-    lvldb = AsyncLvldb()
-    pre_cache = PreCache(lvldb)
-    await pre_cache.itterBlocks()
     
 if __name__ == '__main__':
-    asyncio.run(main())
+    lvldb = plyvel.DB('sheltrPointLVL.db', create_if_missing=True)
+    PreCache(lvldb).itterBlocks()
 
 
