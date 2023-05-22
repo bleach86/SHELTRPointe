@@ -55,7 +55,7 @@ else
     if [[ -n $SSL_KEYFILE && -n $SSL_CERTFILE ]]; then
         python3 -m uvicorn api:app._sio_app --host="$HOST" --port="$PORT" --ssl-keyfile="$SSL_KEYFILE" --ssl-certfile="$SSL_CERTFILE"
     else
-        python3 -m uvicorn api:app._sio_app --host="$HOST" --port="$PORT"
+        python3 -m uvicorn api:app._sio_app --host="$HOST" --port="$PORT" --lifespan on
     fi
 fi
 

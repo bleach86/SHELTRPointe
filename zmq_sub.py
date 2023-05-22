@@ -36,6 +36,7 @@ import json
 import socketio
 
 from util import callrpc
+from evm_utils import WghostUtils
 
 if (sys.version_info.major, sys.version_info.minor) < (3, 5):
     print("This example only works with Python 3.5 and greater")
@@ -44,7 +45,7 @@ if (sys.version_info.major, sys.version_info.minor) < (3, 5):
 port = 28332
 
 
-class ZMQHandler():
+class ZMQHandler:
     def __init__(self, rpcPort, loop, app):
         self.loop = loop
         self.zmqContext = zmq.asyncio.Context()
@@ -56,17 +57,18 @@ class ZMQHandler():
         self.zmqSubSocket.setsockopt_string(zmq.SUBSCRIBE, "rawblock")
         self.zmqSubSocket.setsockopt_string(zmq.SUBSCRIBE, "rawtx")
         self.zmqSubSocket.setsockopt_string(zmq.SUBSCRIBE, "sequence")
-        self.zmqSubSocket.connect("tcp://127.0.0.1:%i" % port)
+        self.zmqSubSocket.connect(f"tcp://127.0.0.1:{port}")
         self.rpcPort = rpcPort
         self.app = app
 
         self.sentTxInfo = []
+        self.wghost = WghostUtils()
 
     async def handle(self):
         topic, body, seq = await self.zmqSubSocket.recv_multipart()
         sequence = "Unknown"
         if len(seq) == 4:
-            sequence = str(struct.unpack('<I', seq)[-1])
+            sequence = str(struct.unpack("<I", seq)[-1])
         if topic == b"hashblock":
             pass
         elif topic == b"hashtx":
@@ -75,7 +77,9 @@ class ZMQHandler():
             pass
         elif topic == b"rawtx":
             try:
-                await self.processTx(binascii.hexlify(body).decode("utf-8"), body[1] == 0x02)
+                await self.processTx(
+                    binascii.hexlify(body).decode("utf-8"), body[1] == 0x02
+                )
             except Exception as e:
                 print(e)
 
@@ -84,94 +88,91 @@ class ZMQHandler():
 
     async def processTx(self, rawTx, isCoinStake):
         decodeTx = await callrpc(self.rpcPort, "decoderawtransaction", [rawTx])
-        
-        if decodeTx['txid'] in self.sentTxInfo:
-            self.sentTxInfo.remove(decodeTx['txid'])
-            
-            return
-        
-        inputs = await self.getInputs(decodeTx['vin'])
-        outputs = {
-            "addrs": {},
-            "outputAmount": 0
-        }
 
-        for txOut in decodeTx['vout']:
-            if "type" in txOut and txOut['type'] in ["blind", "anon"]:
-                if "anon" in inputs['addrs']:
+        if decodeTx["txid"] in self.sentTxInfo:
+            self.sentTxInfo.remove(decodeTx["txid"])
+
+            return
+
+        inputs = await self.getInputs(decodeTx["vin"])
+        outputs = {"addrs": {}, "outputAmount": 0}
+
+        for txOut in decodeTx["vout"]:
+            if "type" in txOut and txOut["type"] in ["blind", "anon"]:
+                if "anon" in inputs["addrs"]:
                     continue
                 else:
-                    outputs['addrs']['anon'] = 0
+                    outputs["addrs"]["anon"] = 0
                     continue
-            elif "type" in txOut and txOut['type'] in ["data"]:
+            elif "type" in txOut and txOut["type"] in ["data"]:
                 continue
 
-            addr = txOut['scriptPubKey']['addresses'][0]
+            addr = txOut["scriptPubKey"]["addresses"][0]
 
-            if addr in outputs['addrs']:
-                outputs['addrs'][addr] += txOut['value']
+            if addr in outputs["addrs"]:
+                outputs["addrs"][addr] += txOut["value"]
             else:
-                outputs['addrs'][addr] = txOut['value']
+                outputs["addrs"][addr] = txOut["value"]
 
-            outputs['outputAmount'] += txOut['value']
+            outputs["outputAmount"] += txOut["value"]
 
         txInfo = {
-            "txid": decodeTx['txid'],
+            "txid": decodeTx["txid"],
             "time": int(time.time()),
-            "inputs": inputs['addrs'],
-            "outputs": outputs['addrs'],
-            "totalTxValue": outputs['outputAmount'] - inputs['inputAmount'],
-            "isCoinStake": isCoinStake
+            "inputs": inputs["addrs"],
+            "outputs": outputs["addrs"],
+            "totalTxValue": outputs["outputAmount"] - inputs["inputAmount"],
+            "isCoinStake": isCoinStake,
         }
 
-        await self.app.emit('room_message', txInfo, room="tx")
+        await self.app.emit("room_message", txInfo, room="tx")
 
         if not isCoinStake:
-            self.sentTxInfo.append(decodeTx['txid'])
+            self.sentTxInfo.append(decodeTx["txid"])
+        else:
+            print(await self.wghost.get_new_burn())
 
     async def getInputs(self, vin):
-        inputs = {
-            "addrs": {},
-            "inputAmount": 0
-        }
+        inputs = {"addrs": {}, "inputAmount": 0}
 
         for txIn in vin:
-            if "type" in txIn and txIn['type'] in ["blind", "anon"]:
-                if "anon" in inputs['addrs']:
+            if "type" in txIn and txIn["type"] in ["blind", "anon"]:
+                if "anon" in inputs["addrs"]:
                     continue
                 else:
-                    inputs['addrs']['anon'] = 0
+                    inputs["addrs"]["anon"] = 0
                     continue
-            utxo = await callrpc(self.rpcPort, "getrawtransaction", [txIn['txid'], True])
-            utxo = utxo["vout"][txIn['vout']]
+            utxo = await callrpc(
+                self.rpcPort, "getrawtransaction", [txIn["txid"], True]
+            )
+            utxo = utxo["vout"][txIn["vout"]]
 
-            addr = utxo['scriptPubKey']['addresses'][0]
+            addr = utxo["scriptPubKey"]["addresses"][0]
 
-            if addr in inputs['addrs']:
+            if addr in inputs["addrs"]:
                 if "value" in utxo:
-                    inputs['addrs'][addr] += utxo['value']
-                    inputs['inputAmount'] += utxo['value']
+                    inputs["addrs"][addr] += utxo["value"]
+                    inputs["inputAmount"] += utxo["value"]
             else:
                 if "value" in utxo:
-                    inputs['addrs'][addr] = utxo['value']
-                    inputs['inputAmount'] += utxo['value']
+                    inputs["addrs"][addr] = utxo["value"]
+                    inputs["inputAmount"] += utxo["value"]
 
         return inputs
 
     async def cleanUpTxid(self):
-
         while True:
-
             for txid in self.sentTxInfo.copy():
-                
                 try:
                     tx = await callrpc(self.rpcPort, "getrawtransaction", [txid, True])
 
-                    if "confirmations" in tx and (tx['confirmations'] < 0 or tx['confirmations'] > 0):
+                    if "confirmations" in tx and (
+                        tx["confirmations"] < 0 or tx["confirmations"] > 0
+                    ):
                         self.sentTxInfo.remove(txid)
                 except:
                     self.sentTxInfo.remove(txid)
-                    
+
             await asyncio.sleep(600)
 
     def start(self):
@@ -181,8 +182,3 @@ class ZMQHandler():
     def stop(self):
         self.loop.stop()
         self.zmqContext.destroy()
-
-
-if __name__ == "__main__":
-    daemon = ZMQHandler()
-    daemon.start()

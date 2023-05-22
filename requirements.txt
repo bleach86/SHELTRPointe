@@ -8,3 +8,4 @@ quart_cors
 uvicorn
 plyvel
 aiosqlite
+web3
