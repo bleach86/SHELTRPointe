@@ -13,11 +13,14 @@ import random
 class KademliaP2P:
     def __init__(self):
         self.server = KademliaServer(storage=ForgetfulStorageExt())
+        self.isBootStrap = False
 
-    async def bootstrap_conn(self):
+    async def bootstrap_conn(self, addr, port):
         await self.server.listen(8470)
-        bootstrap_node = ("127.0.0.1", int(8468))
-        await self.server.bootstrap([bootstrap_node])
+
+        if not self.isBootStrap:
+            bootstrap_node = (addr, int(port))
+            await self.server.bootstrap([bootstrap_node])
 
     async def set(self, key, value):
         return await self.server.set(key, value)

@@ -532,7 +532,7 @@ async def startup():
 
     # loop.create_task(wghost.get_burn())
 
-    # await p2p.bootstrap_conn()
+    # await p2p.bootstrap_conn("127.0.0.1", 8470)
 
     app.add_background_task(runDb)
     app.add_background_task(daemon.start)
