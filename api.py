@@ -467,7 +467,7 @@ async def test_disconnect(sid):
 async def on_join(sid, data):
     username = data["username"]
     room = data["room"]
-    await app.enter_room(sid, room)
+    app.enter_room(sid, room)
 
     # await app.emit("server_response", f'{username} has entered the room. {room}', room=room, to=sid)
 
@@ -476,19 +476,12 @@ async def on_join(sid, data):
 async def on_leave(data):
     username = data["username"]
     room = data["room"]
-    await app.leave_room(room)
+    app.leave_room(room)
 
 
 @app.on("client_message")
 async def handle_client_message(message, ctx):
     print("Received message from client:", message)
-
-    # if "txid" in message:
-    #     await app.emit('server_response', getTx(message['txid'], standalone=True))
-    #     return
-
-    # Send a response back to the client
-    await app.emit("server_response", {"data": "Response from server"})
 
 
 async def newTx(msg):
