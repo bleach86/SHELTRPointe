@@ -68,7 +68,12 @@ class ZMQHandler():
         if len(seq) == 4:
             sequence = str(struct.unpack('<I', seq)[-1])
         if topic == b"hashblock":
-            pass
+            try:
+                bc_info = await callrpc(self.rpcPort, "getblockchaininfo", [])
+                await self.app.emit('room_message', bc_info, room="block")
+            except Exception as e:
+                print(e)
+
         elif topic == b"hashtx":
             pass
         elif topic == b"rawblock":
