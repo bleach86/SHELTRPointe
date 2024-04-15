@@ -39,6 +39,7 @@ class QuartSIO:
         self.route = self._quart_app.route
         self.on = self._sio.on
         self.enter_room = self._sio.enter_room
+        self.leave_room = self._sio.leave_room
         self.emit = self._sio.emit
 
     async def _run(self, host: str, port: int):
@@ -86,6 +87,10 @@ async def ping():
 @app.route('/getblockcount/', methods=["GET"])
 async def getBlockCount():
     return jsonify(await callrpc(PORT, "getblockcount"))
+
+@app.route('/getblockchaininfo/', methods=["GET"])
+async def getBlockChainInfo():
+    return jsonify(await callrpc(PORT, "getblockchaininfo"))
 
 @app.route('/api/block/<blockHash>/', methods=["GET"])
 async def getBlock(blockHash):
@@ -444,7 +449,7 @@ async def test_disconnect(sid):
 async def on_join(sid, data):
     username = data['username']
     room = data['room']
-    app.enter_room(sid, room)
+    await app.enter_room(sid, room)
     
     # await app.emit("server_response", f'{username} has entered the room. {room}', room=room, to=sid)
 
@@ -453,11 +458,11 @@ async def on_join(sid, data):
 async def on_leave(data):
     username = data['username']
     room = data['room']
-    leave_room(room)
+    await app.leave_room(room)
 
 
 @app.on('client_message')
-async def handle_client_message(message):
+async def handle_client_message(message, ctx):
     print('Received message from client:', message)
     
     if "txid" in message:
